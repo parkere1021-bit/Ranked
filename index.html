@@ -1,1 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- App Store / PWA Prep Meta Tags -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0F0E17">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Ranked — The Party Game</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        bg: '#0F0E17', surface: '#1A1932', surfaceLight: '#252445',
+        coral: '#FF6B6B', teal: '#2EC4B6', gold: '#FFE66D',
+        orange: '#FF9F1C', pink: '#F15BB5', lime: '#06D6A0', red: '#E63946',
+      },
+      fontFamily: { display: ['"Fredoka One"', 'cursive'], body: ['Nunito', 'sans-serif'] }
+    }
+  }
+}
+</script>
+<style>
+  :root { --bg: #0F0E17; --surface: #1A1932; --coral: #FF6B6B; --teal: #2EC4B6; --gold: #FFE66D; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body { font-family: 'Nunito', sans-serif; background: var(--bg); color: #fff; -webkit-user-select: none; user-select: none; }
+  
+  /* Prevent pull-to-refresh and bounce effects on mobile */
+  body { overscroll-behavior-y: contain; }
 
+  .screen { display: none; position: absolute; inset: 0; z-index: 10; flex-direction: column; align-items: center; justify-content: center; padding: 1rem; overflow-y: auto; }
+  .screen.active { display: flex; animation: fadeIn .4s ease; }
+  
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes popIn { 0% { opacity: 0; transform: scale(0.5); } 70% { transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+  @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  @keyframes confettiFall { 0% { transform: translateY(-10px) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+  @keyframes emoteFloat { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-80px) scale(1.5); } }
+  @keyframes rankBadge { 0% { transform: scale(0) rotate(-180deg); } 60% { transform: scale(1.3) rotate(10deg); } 100% { transform: scale(1) rotate(0deg); } }
+  @keyframes twistGlitch { 0% { transform: translate(0) } 20% { transform: translate(-2px, 2px) } 40% { transform: translate(-2px, -2px) } 60% { transform: translate(2px, 2px) } 80% { transform: translate(2px, -2px) } 100% { transform: translate(0) } }
+
+  .animate-slide-up { animation: slideUp .5s ease both; }
+  .animate-pop { animation: popIn .4s ease both; }
+  .animate-float { animation: float 3s ease infinite; }
+  .animate-glitch { animation: twistGlitch 0.2s ease infinite; }
+
+  #bg-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  .gradient-text { background: linear-gradient(135deg, #FF6B6B, #FFE66D, #2EC4B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; padding: .75rem 2rem; border-radius: 9999px; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1rem; border: none; cursor: pointer; transition: all .2s ease; text-transform: uppercase; letter-spacing: 1px; touch-action: manipulation; }
+  .btn:active { transform: scale(0.95); }
+  .btn-primary { background: var(--coral); color: #fff; }
+  .btn-primary:hover { background: #ff5252; box-shadow: 0 0 30px rgba(255,107,107,0.4); }
+  .btn-secondary { background: var(--teal); color: #fff; }
+  .btn-gold { background: linear-gradient(135deg, #FFE66D, #FF9F1C); color: #1A1932; }
+  .btn-outline { background: transparent; border: 2px solid rgba(255,255,255,0.3); color: #fff; }
+  .btn-outline:hover { border-color: #fff; background: rgba(255,255,255,0.1); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+  .avatar { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Fredoka One', cursive; font-size: 1.2rem; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.3); flex-shrink: 0; border: 3px solid rgba(255,255,255,0.3); }
+  .avatar-lg { width: 80px; height: 80px; font-size: 2rem; border-width: 4px; }
+  .avatar-xl { width: 120px; height: 120px; font-size: 3rem; border-width: 5px; }
+
+  .card { background: rgba(26,25,50,0.8); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 1.25rem; padding: 1.5rem; }
+
+  .rank-card { background: rgba(26,25,50,0.9); backdrop-filter: blur(20px); border: 2px solid rgba(255,255,255,0.1); border-radius: 1rem; padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1rem; cursor: pointer; transition: all .25s ease; user-select: none; touch-action: manipulation; }
+  .rank-card.ranked { border-color: var(--teal); background: rgba(46,196,182,0.15); }
+  .rank-badge { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Fredoka One', cursive; font-size: 1.1rem; background: var(--teal); color: #fff; flex-shrink: 0; animation: rankBadge .4s ease both; }
+
+  .reveal-item { display: flex; align-items: center; gap: 1rem; padding: 1rem; border-radius: 1rem; opacity: 0; transform: translateX(80px); transition: all .5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  .reveal-item.shown { opacity: 1; transform: translateX(0); }
+  .reveal-item.winner { background: rgba(255,230,109,0.15); border: 2px solid var(--gold); }
+
+  .reveal-rank { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Fredoka One', cursive; font-size: 1.3rem; flex-shrink: 0; }
+  .confetti-piece { position: fixed; top: -10px; width: 10px; height: 10px; z-index: 999; animation: confettiFall linear forwards; pointer-events: none; }
+  
+  .emote-btn { font-size: 1.5rem; background: rgba(255,255,255,0.1); border: none; border-radius: 50%; width: 48px; height: 48px; cursor: pointer; transition: transform .1s; touch-action: manipulation; }
+  .emote-btn:active { transform: scale(0.8); }
+  .floating-emote { position: fixed; bottom: 100px; font-size: 3rem; pointer-events: none; z-index: 50; animation: emoteFloat 1.5s ease forwards; }
+
+  /* MENU SYSTEM */
+  #menu-btn { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 40; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all .2s; color: white; font-size: 1.5rem; touch-action: manipulation; }
+  #menu-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.1); }
+  
+  #menu-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50; display: none; }
+  #menu-overlay.active { display: block; }
+  
+  #menu-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 320px; max-width: 85vw; background: #E63946; z-index: 60; transform: translateX(100%); transition: transform .3s ease; box-shadow: -5px 0 30px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
+  #menu-panel.active { transform: translateX(0); }
+  
+  .menu-header { padding: 2rem; border-bottom: 4px solid rgba(0,0,0,0.1); display: flex; align-items: center; gap: 1rem; }
+  .menu-list { flex: 1; padding: 1rem 0; overflow-y: auto; }
+  .menu-item { display: flex; align-items: center; gap: 1.25rem; padding: 1.25rem 2rem; color: white; font-weight: 800; font-size: 1.2rem; cursor: pointer; transition: background .2s; touch-action: manipulation; }
+  .menu-item:hover { background: rgba(0,0,0,0.15); }
+  .menu-item i { width: 24px; text-align: center; font-size: 1.3rem; }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 100; display: none; align-items: center; justify-content: center; padding: 1rem; }
+  .modal-overlay.active { display: flex; }
+  .modal-content { background: #1A1932; border-radius: 1.5rem; padding: 2rem; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); animation: popIn .3s ease; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+
+  /* Allow text selection only for input fields */
+  input, textarea { -webkit-user-select: auto; user-select: auto; }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+</style>
+</head>
+<body class="bg-bg font-body">
+<canvas id="bg-canvas"></canvas>
+
+<!-- MENU BUTTON -->
+<button id="menu-btn" onclick="toggleMenu()"><i class="fas fa-bars"></i></button>
+
+<!-- MENU OVERLAY -->
+<div id="menu-overlay" onclick="toggleMenu()"></div>
+
+<!-- MENU PANEL -->
+<div id="menu-panel">
+  <div class="menu-header">
+    <i class="fas fa-pizza-slice text-3xl"></i>
+    <span class="font-display text-3xl tracking-wide">MENU</span>
+  </div>
+  <div class="menu-list">
+    <div class="menu-item" onclick="openModal('howto'); toggleMenu();"><i class="fas fa-question-circle"></i> How to Play</div>
+    <div class="menu-item" onclick="backToLobby(); toggleMenu();"><i class="fas fa-redo"></i> New Game</div>
+    <div class="menu-item" onclick="toggleSound();"><i class="fas fa-volume-up" id="sound-icon"></i> <span id="sound-text">Sound On</span></div>
+    <div class="menu-item" onclick="window.location.href='mailto:parkere1021@gmail.com'; toggleMenu();"><i class="fas fa-envelope"></i> Contact</div>
+    <div class="menu-item" onclick="openModal('about'); toggleMenu();"><i class="fas fa-info-circle"></i> About</div>
+  </div>
+</div>
+
+<!-- TITLE -->
+<div id="screen-title" class="screen active">
+  <div class="text-center max-w-lg mx-auto">
+    <div class="animate-float mb-4"><div class="text-8xl md:text-9xl font-display gradient-text leading-none tracking-tight">RANKED</div></div>
+    <p class="text-xl font-bold text-white/60 mb-2">The party game that ruins friendships</p>
+    <p class="text-sm text-white/30 mb-10">3-10 players &middot; Room Codes &middot; Hilarious</p>
+    <div class="flex flex-col gap-3 items-center">
+      <button class="btn btn-primary text-lg px-10" onclick="initHostLobby()"><i class="fas fa-wifi"></i> Host Game</button>
+      <button class="btn btn-secondary text-lg px-10" onclick="showScreen('join')"><i class="fas fa-link"></i> Join Game</button>
+      <button class="btn btn-outline" onclick="initLocalLobby()"><i class="fas fa-users"></i> Local Pass & Play</button>
+    </div>
+  </div>
+</div>
+
+<!-- JOIN -->
+<div id="screen-join" class="screen">
+  <div class="w-full max-w-sm mx-auto text-center">
+    <button class="btn btn-outline text-sm mb-6" onclick="showScreen('title')"><i class="fas fa-arrow-left"></i> Back</button>
+    <h2 class="font-display text-3xl gradient-text mb-6">Join Room</h2>
+    <div class="card mb-4">
+      <input id="join-code" type="text" placeholder="ROOM CODE" maxlength="4" class="w-full bg-white/10 rounded-xl px-4 py-4 text-center text-3xl font-display tracking-[0.3em] uppercase text-white border border-white/10 focus:border-teal focus:outline-none">
+      <input id="join-name" type="text" placeholder="Your Name" maxlength="12" class="w-full bg-white/10 rounded-xl px-4 py-3 text-white font-bold text-center mt-3 border border-white/10 focus:border-teal focus:outline-none">
+      <button class="btn btn-primary w-full mt-4" onclick="joinRoom()"><i class="fas fa-right-to-bracket"></i> Join</button>
+    </div>
+    <p id="join-error" class="text-red text-sm hidden"></p>
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="screen-lobby" class="screen">
+  <div class="w-full max-w-lg mx-auto">
+    <button class="btn btn-outline text-sm mb-4" onclick="leaveLobby()"><i class="fas fa-arrow-left"></i> Leave</button>
+    <div class="flex justify-between items-start mb-4">
+      <div><h2 class="font-display text-3xl gradient-text">Lobby</h2><p class="text-white/50 text-sm">Waiting for players...</p></div>
+      <div id="lobby-code-box" class="card py-2 px-4 text-center hidden"><div class="text-xs text-white/40">Room Code</div><div class="font-display text-2xl tracking-[0.2em] text-teal" id="lobby-code"></div></div>
+    </div>
+    <div id="player-list" class="space-y-2 mb-4 max-h-[25vh] overflow-y-auto"></div>
+    <div id="local-add-player" class="card mb-4 hidden">
+      <div class="flex gap-3 mb-3"><input id="player-name-input" type="text" placeholder="Enter player name..." maxlength="12" class="flex-1 bg-white/10 rounded-xl px-4 py-3 text-white font-bold placeholder:text-white/30 border border-white/10 focus:border-teal focus:outline-none" onkeydown="if(event.key==='Enter')localAddPlayer()"><button class="btn btn-secondary text-sm px-4" onclick="localAddPlayer()"><i class="fas fa-plus"></i></button></div>
+      <div class="flex gap-2 flex-wrap" id="color-picker"></div>
+    </div>
+    <div class="card mb-4">
+      <h3 class="font-bold text-sm text-white/60 uppercase tracking-wider mb-3">Prompt Packs</h3>
+      <div class="grid grid-cols-2 gap-2 mb-4" id="pack-selector"></div>
+      <h3 class="font-bold text-sm text-white/60 uppercase tracking-wider mb-3">Custom Prompts</h3>
+      <textarea id="custom-prompts" class="w-full bg-white/10 rounded-xl p-3 text-white text-sm border border-white/10 focus:border-teal focus:outline-none h-20 placeholder:text-white/20" placeholder="One prompt per line...&#10;e.g. Most likely to eat the last slice"></textarea>
+      <h3 class="font-bold text-sm text-white/60 uppercase tracking-wider mb-3 mt-4">Rounds</h3>
+      <div class="flex gap-2" id="round-picker"></div>
+    </div>
+    <button id="start-btn" class="btn btn-gold text-lg w-full" onclick="startGame()" disabled><i class="fas fa-rocket"></i> Start Game</button>
+  </div>
+</div>
+
+<!-- WAITING -->
+<div id="screen-waiting" class="screen">
+  <div class="text-center">
+    <div class="animate-float"><i class="fas fa-satellite-dish text-6xl text-teal mb-6"></i></div>
+    <h2 class="font-display text-3xl mb-2">Connected!</h2>
+    <p class="text-white/50">Waiting for host to start the game...</p>
+    <div class="mt-8 flex justify-center gap-4"><button class="emote-btn" onclick="sendEmote('🔥')">🔥</button><button class="emote-btn" onclick="sendEmote('😂')">😂</button><button class="emote-btn" onclick="sendEmote('💀')">💀</button></div>
+  </div>
+</div>
+
+<!-- PREDICTION -->
+<div id="screen-prediction" class="screen">
+  <div class="text-center max-w-md mx-auto">
+    <div class="text-sm font-bold text-white/40 uppercase tracking-widest mb-4" id="pred-round-label"></div>
+    <p class="text-2xl md:text-3xl font-display text-gold mb-6" id="pred-prompt"></p>
+    
+    <!-- Plot Twist Banner -->
+    <div id="plot-twist-banner" class="hidden mb-6 animate-glitch bg-coral/20 border-2 border-coral rounded-xl p-4">
+      <div class="font-display text-xl text-coral"><i class="fas fa-bolt"></i> PLOT TWIST!</div>
+      <div class="font-bold text-sm mt-1" id="plot-twist-text"></div>
+    </div>
+
+    <p class="text-white/60 mb-4">Quick! Who do you think the group will rank #1?</p>
+    <div id="pred-options" class="grid grid-cols-2 gap-3 mb-6"></div>
+    <p class="text-xs text-teal" id="pred-status">Waiting for others...</p>
+  </div>
+</div>
+
+<!-- PASS (Local) -->
+<div id="screen-pass" class="screen">
+  <div class="text-center max-w-md mx-auto">
+    <div class="text-6xl mb-6 opacity-30"><i class="fas fa-hand-point-right"></i></div>
+    <p class="text-xl text-white/50 mb-3">Pass the device to</p>
+    <div class="flex flex-col items-center gap-3 mb-8"><div id="pass-avatar" class="avatar avatar-xl"></div><p class="text-3xl font-display" id="pass-name"></p></div>
+    <button class="btn btn-primary text-lg px-10" onclick="beginLocalRanking()"><i class="fas fa-eye"></i> I'm Ready</button>
+  </div>
+</div>
+
+<!-- RANKING -->
+<div id="screen-ranking" class="screen">
+  <div class="w-full max-w-lg mx-auto">
+    <div class="text-sm font-bold text-white/40 mb-2 text-center" id="ranking-player-label"></div>
+    <div class="card mb-4 text-center"><p class="text-lg md:text-xl font-display text-gold" id="ranking-prompt"></p></div>
+    <p class="text-xs text-white/40 mb-3 text-center" id="ranking-hint">Tap players in order — 1st tap = Rank 1 (most likely)</p>
+    <div id="ranking-cards" class="space-y-2 mb-6"></div>
+    <div class="flex gap-3">
+      <button class="btn btn-outline flex-1" onclick="resetRanking()"><i class="fas fa-rotate-left"></i> Reset</button>
+      <button id="submit-rank-btn" class="btn btn-primary flex-1" onclick="submitRanking()" disabled><i class="fas fa-check"></i> Submit</button>
+    </div>
+    <div class="mt-6 flex justify-center gap-4"><button class="emote-btn" onclick="sendEmote('🤔')">🤔</button><button class="emote-btn" onclick="sendEmote('😈')">😈</button><button class="emote-btn" onclick="sendEmote('🫣')">🫣</button></div>
+  </div>
+</div>
+
+<!-- REVEAL -->
+<div id="screen-reveal" class="screen">
+  <div class="w-full max-w-lg mx-auto text-center">
+    <div class="text-sm font-bold text-white/40 uppercase tracking-widest mb-2" id="reveal-round-label"></div>
+    <p class="text-xl md:text-2xl font-display text-gold mb-6" id="reveal-prompt"></p>
+    <div id="reveal-list" class="space-y-3 mb-8"></div>
+    <div id="reveal-actions" class="hidden">
+      <button class="btn btn-secondary text-lg px-10" onclick="showRoundScores()"><i class="fas fa-star"></i> See Scores</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCORES -->
+<div id="screen-scores" class="screen">
+  <div class="w-full max-w-lg mx-auto text-center">
+    <h2 class="font-display text-3xl gradient-text mb-6">Round Scores</h2>
+    <div id="score-list" class="space-y-3 mb-6"></div>
+    <button class="btn btn-primary text-lg px-10" id="next-round-btn" onclick="nextRound()"><i class="fas fa-arrow-right"></i> Next Round</button>
+  </div>
+</div>
+
+<!-- FINAL / YEARBOOK -->
+<div id="screen-final" class="screen">
+  <div class="w-full max-w-lg mx-auto text-center">
+    <div class="animate-float mb-2"><i class="fas fa-crown text-4xl text-gold"></i></div>
+    <h2 class="font-display text-3xl gradient-text mb-6">Yearbook</h2>
+    <div id="final-winner" class="mb-6"></div>
+    <div id="final-superlatives" class="grid grid-cols-2 gap-3 mb-6"></div>
+    <div id="final-standings" class="space-y-2 mb-8"></div>
+    <button class="btn btn-gold text-lg px-10" onclick="backToLobby()"><i class="fas fa-rotate"></i> Play Again</button>
+  </div>
+</div>
+
+<!-- HOW TO PLAY MODAL -->
+<div id="modal-howto" class="modal-overlay" onclick="if(event.target===this)closeModal('howto')">
+  <div class="modal-content">
+    <div class="flex justify-between items-center mb-6"><h3 class="font-display text-2xl gradient-text">How to Play</h3><button onclick="closeModal('howto')" class="text-white/40 hover:text-white text-2xl"><i class="fas fa-times"></i></button></div>
+    <div class="space-y-4 text-left">
+      <p><strong class="text-teal">1. The Prompt:</strong> A funny question appears, like "Who's the worst driver?"</p>
+      <p><strong class="text-coral">2. Predict:</strong> Quick! Guess who the group will pick as #1 for bonus points.</p>
+      <p><strong class="text-gold">3. Rank:</strong> Secretly rank everyone from most likely (#1) to least likely.</p>
+      <p><strong class="text-lime">4. Reveal:</strong> The group's consensus is revealed!</p>
+      <p><strong class="text-pink">5. Score:</strong> Match the group's consensus to earn points. Most points wins!</p>
+    </div>
+  </div>
+</div>
+
+<!-- ABOUT MODAL -->
+<div id="modal-about" class="modal-overlay" onclick="if(event.target===this)closeModal('about')">
+  <div class="modal-content text-center">
+    <div class="flex justify-between items-center mb-6"><h3 class="font-display text-2xl gradient-text">About Ranked</h3><button onclick="closeModal('about')" class="text-white/40 hover:text-white text-2xl"><i class="fas fa-times"></i></button></div>
+    <p class="text-white/60 mb-4">Ranked is a local & online multiplayer party game designed to ruin friendships and spark hilarious debates.</p>
+    <p class="text-white/40 text-sm">Version 1.0 | Built with HTML, CSS, and JS</p>
+  </div>
+</div>
+
+<div id="emote-container" style="position:fixed;inset:0;pointer-events:none;z-index:9999;"></div>
+
+<script>
+const AVATAR_COLORS = ['#FF6B6B','#2EC4B6','#FFD166','#FF9F1C','#F15BB5','#06D6A0','#118AB2','#E63946','#B8B8FF','#FFBE0B'];
+const PACKS = [
+  { id: 'classic', name: 'Classic Chaos', icon: 'fa-bolt', active: true, prompts: ["Most likely to survive a zombie apocalypse","Worst driver","Most dramatic","Most likely to become famous","Most suspicious","Most likely to forget their own birthday","Best liar","Most competitive","Most likely to get lost in their own neighborhood","Most likely to laugh at a funeral","Most chaotic energy","Worst cook","Biggest procrastinator","Most likely to accidentally start a cult","Biggest snitch","Worst sense of direction","Most likely to be late to their own wedding","Best excuse maker","Least likely to survive a horror movie","Most likely to text the wrong person","Biggest complainer","Most likely to eat something off the floor","Worst at taking compliments","Most likely to accidentally set something on fire","Biggest drama queen"] },
+  { id: 'family', name: 'Family Friendly', icon: 'fa-heart', active: false, prompts: ["Most helpful","Best storyteller","Funniest","Most creative","Best cook","Most adventurous","Most likely to brighten your day","Best dancer","Biggest dreamer","Most organized","Best listener","Most likely to succeed","Most generous","Most likely to travel the world","Best at solving problems","Most patient","Best fashion sense","Most likely to adopt 10 pets","Hardest worker","Most likely to win a game show"] },
+  { id: 'roommates', name: 'Roommates', icon: 'fa-house', active: false, prompts: ["Most likely to leave dishes in the sink","Worst at paying bills on time","Takes the longest showers","Most likely to eat your food","Loudest in the morning","Messiest room","Most likely to host a party","Worst at taking out trash","Most likely to adopt a secret pet","Hogs the TV"] },
+  { id: 'deep', name: 'Deep Thoughts', icon: 'fa-brain', active: false, prompts: ["Most likely to move to another country","Best at keeping secrets","Most likely to write a book","Biggest overthinker","Most likely to change the world","Most philosophical","Best under pressure","Most likely to cry during a movie","Most empathetic","Most likely to stay friends forever"] }
+];
+const TWISTS = [
+  { id: 'inversion', name: 'Inversion!', desc: 'Rank LEAST likely to most likely. The "worst" is now #1!' },
+  { id: 'hater', name: 'Hater Mode!', desc: 'Bonus points for putting the current leader in last place.' },
+  { id: 'podium', name: 'Podium Finish!', desc: 'Only the Top 3 ranked players matter. Everyone else gets 0 points.' }
+];
+
+const game = {
+  isHost: false, isOnline: false, peer: null, connections: [], hostConn: null,
+  players: [], scores: {}, roundScores: {}, predictions: {}, rankings: {},
+  consensus: [], currentPrompt: '', usedPrompts: new Set(), prompts: [],
+  currentRound: 0, totalRounds: 5, currentRanking: [], 
+  selectedColor: 0, localTurnIndex: 0, roomCode: '',
+  activeTwist: null, soundOn: true
+};
+
+let audioCtx;
+function playSound(type) {
+  if(!game.soundOn) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+    const makeOsc = (freq, t, dur, vol=0.1, type='sine') => {
+      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination); o.frequency.value=freq; o.type=type;
+      g.gain.setValueAtTime(vol, now+t); g.gain.exponentialRampToValueAtTime(0.001, now+t+dur);
+      o.start(now+t); o.stop(now+t+dur);
+    };
+    if(type==='click') makeOsc(800,0,0.1);
+    else if(type==='wrong') makeOsc(200,0,0.3,0.15,'sawtooth');
+    else if(type==='rank') { makeOsc(500,0,0.15); makeOsc(900,0.05,0.15); }
+    else if(type==='reveal') { makeOsc(400,0,0.3,0.1,'triangle'); makeOsc(600,0.1,0.3,0.1,'triangle'); }
+    else if(type==='fanfare') { [523,659,784,1047].forEach((f,i)=>makeOsc(f,i*0.12,0.3,0.08,'square')); }
+    else if(type==='twist') { makeOsc(200,0,0.4,0.15,'sawtooth'); makeOsc(150,0.1,0.4,0.15,'sawtooth'); }
+  } catch(e){}
+}
+
+const bgCanvas = document.getElementById('bg-canvas');
+const bgCtx = bgCanvas.getContext('2d');
+let bgOrbs = [];
+function initBackground() {
+  bgCanvas.width = window.innerWidth; bgCanvas.height = window.innerHeight;
+  bgOrbs = Array.from({length:10}, () => ({
+    x: Math.random()*bgCanvas.width, y: Math.random()*bgCanvas.height, r: 80+Math.random()*120,
+    vx: (Math.random()-0.5)*0.3, vy: (Math.random()-0.5)*0.3,
+    color: ['#FF6B6B','#2EC4B6','#FFE66D','#F15BB5','#06D6A0'][Math.floor(Math.random()*5)]
+  }));
+}
+function animateBackground() {
+  bgCtx.fillStyle = '#0F0E17'; bgCtx.fillRect(0,0,bgCanvas.width,bgCanvas.height);
+  bgOrbs.forEach(o => {
+    o.x+=o.vx; o.y+=o.vy;
+    if(o.x<-o.r)o.x=bgCanvas.width+o.r; if(o.x>bgCanvas.width+o.r)o.x=-o.r;
+    if(o.y<-o.r)o.y=bgCanvas.height+o.r; if(o.y>bgCanvas.height+o.r)o.y=-o.r;
+    const g = bgCtx.createRadialGradient(o.x,o.y,0,o.x,o.y,Math.max(1,o.r));
+    g.addColorStop(0, o.color+'22'); g.addColorStop(1, o.color+'00');
+    bgCtx.fillStyle=g; bgCtx.beginPath(); bgCtx.arc(o.x,o.y,Math.max(1,o.r),0,Math.PI*2); bgCtx.fill();
+  });
+  requestAnimationFrame(animateBackground);
+}
+window.addEventListener('resize', () => { bgCanvas.width=window.innerWidth; bgCanvas.height=window.innerHeight; });
+initBackground(); animateBackground();
+
+function showScreen(id) { document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('screen-'+id).classList.add('active'); }
+function openModal(id) { document.getElementById('modal-'+id).classList.add('active'); }
+function closeModal(id) { document.getElementById('modal-'+id).classList.remove('active'); }
+function showToast(msg) { const t = document.createElement('div'); t.className='fixed top-4 left-1/2 -translate-x-1/2 bg-surface border border-white/20 px-6 py-3 rounded-full font-bold z-50 animate-pop'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 2500); }
+function renderAvatar(p, size='') { return `<div class="avatar ${size}" style="background:${p.color}">${p.name.charAt(0).toUpperCase()}</div>`; }
+
+function launchConfetti(count=60) {
+  const colors = ['#FF6B6B','#2EC4B6','#FFE66D','#F15BB5','#06D6A0'];
+  for(let i=0;i<count;i++){const p=document.createElement('div');p.className='confetti-piece';p.style.left=Math.random()*100+'vw';p.style.background=colors[Math.floor(Math.random()*5)];p.style.width=(6+Math.random()*8)+'px';p.style.height=(6+Math.random()*8)+'px';p.style.borderRadius=Math.random()>0.5?'50%':'2px';p.style.animationDuration=(1.5+Math.random()*2)+'s';p.style.animationDelay=(Math.random()*0.5)+'s';document.body.appendChild(p);setTimeout(()=>p.remove(),4000);}
+}
+function spawnFloatingEmote(emote) { const el = document.createElement('div'); el.className='floating-emote'; el.textContent=emote; el.style.left=Math.random()*80+10+'vw'; document.getElementById('emote-container').appendChild(el); setTimeout(()=>el.remove(), 1500); }
+
+function toggleMenu() {
+  const panel = document.getElementById('menu-panel'); const overlay = document.getElementById('menu-overlay');
+  const isActive = panel.classList.contains('active');
+  if(isActive) { panel.classList.remove('active'); overlay.classList.remove('active'); } 
+  else { panel.classList.add('active'); overlay.classList.add('active'); }
+}
+function toggleSound() {
+  game.soundOn = !game.soundOn;
+  document.getElementById('sound-icon').className = game.soundOn ? 'fas fa-volume-up' : 'fas fa-volume-mute';
+  document.getElementById('sound-text').textContent = game.soundOn ? 'Sound On' : 'Sound Off';
+  if(game.soundOn) playSound('click');
+}
+
+function generateRoomCode() { const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let code=''; for(let i=0;i<4;i++) code+=c[Math.floor(Math.random()*c.length)]; return code; }
+
+function initHostLobby() {
+  game.isHost=true; game.isOnline=true; game.players=[]; game.scores={};
+  showToast("Connecting to server..."); game.roomCode = generateRoomCode();
+  game.peer = new Peer('ranked-' + game.roomCode, { debug: 0 });
+  game.peer.on('open', () => { setupLobbyUI(true); showScreen('lobby'); });
+  game.peer.on('connection', conn => { conn.on('open', () => { conn.on('data', data => handleClientMessage(conn, data)); }); });
+  game.peer.on('error', err => { if(err.type==='unavailable-id'){game.roomCode=generateRoomCode();game.peer.destroy();initHostLobby();}else{showToast("Connection error. Trying local.");initLocalLobby();} });
+}
+function joinRoom() {
+  const code=document.getElementById('join-code').value.trim().toUpperCase(); const name=document.getElementById('join-name').value.trim(); const errEl=document.getElementById('join-error');
+  if(!code||!name){errEl.textContent="Need code & name!";errEl.classList.remove('hidden');return;}
+  game.isHost=false; game.isOnline=true; game.peer=new Peer({debug:0});
+  game.peer.on('open', () => {
+    game.hostConn=game.peer.connect('ranked-'+code);
+    game.hostConn.on('open', () => { game.hostConn.send({type:'join',name:name,color:AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)]}); showScreen('waiting'); });
+    game.hostConn.on('data', data => handleHostMessage(data));
+    game.hostConn.on('error', () => { errEl.textContent="Couldn't connect!"; errEl.classList.remove('hidden'); });
+  });
+}
+function sendEmote(emote) { spawnFloatingEmote(emote); if(game.isOnline){const payload={type:'emote',emote:emote};if(game.isHost)broadcastToClients(payload);else if(game.hostConn)game.hostConn.send(payload);} }
+function broadcastToClients(data) { game.connections.forEach(c => { try { c.send(data); } catch(e){} }); }
+function handleClientMessage(conn, data) {
+  if(data.type==='join'){
+    // Check for duplicate names
+    if(game.players.some(p => p.name.toLowerCase() === data.name.toLowerCase())) {
+      conn.send({type: 'error', message: 'Name already taken!'});
+      setTimeout(() => conn.close(), 500);
+      return;
+    }
+    const p={id:'p_'+Date.now(),name:data.name,color:data.color,score:0,connId:conn.peer,isHost:false};
+    game.players.push(p);game.scores[p.id]=0;conn.send({type:'welcome',playerId:p.id});broadcastLobbyState();
+  }
+  else { 
+    const clientPlayer = game.players.find(p => p.connId === conn.peer);
+    if(data.type==='prediction'){if(clientPlayer)game.predictions[clientPlayer.id]=data.guess;checkAllPredictions();}
+    else if(data.type==='ranking'){if(clientPlayer)game.rankings[clientPlayer.id]=data.ranking;checkAllRankings();}
+    else if(data.type==='emote'){spawnFloatingEmote(data.emote);broadcastToClients(data);}
+  }
+}
+function handleHostMessage(data) {
+  if(data.type==='lobby_state'){game.players=data.players;game.roomCode=data.roomCode;}
+  else if(data.type==='change_screen'){showScreen(data.screen);if(data.payload)populateScreenPayload(data.screen,data.payload);}
+  else if(data.type==='emote'){spawnFloatingEmote(data.emote);}
+  else if(data.type==='error'){showToast(data.message);showScreen('join');} // Handle name taken error on client
+}
+function broadcastLobbyState() { if(!game.isHost)return;const state={type:'lobby_state',players:game.players.map(p=>({name:p.name,color:p.color,score:p.score})),roomCode:game.roomCode}; game.connections.forEach(c=>{try{c.send(state);}catch(e){}});renderPlayerList();document.getElementById('start-btn').disabled=game.players.length<3; }
+
+function setupLobbyUI(isHostScreen) {
+  document.getElementById('lobby-code-box').classList.toggle('hidden',!game.isOnline);
+  document.getElementById('lobby-code').textContent=game.roomCode;
+  document.getElementById('local-add-player').classList.toggle('hidden',!isHostScreen||game.isOnline);
+  const picker=document.getElementById('color-picker');picker.innerHTML=AVATAR_COLORS.map((c,i)=>`<div class="color-opt ${i===0?'selected':''}" style="background:${c}" onclick="selectColor(${i})"></div>`).join('');game.selectedColor=0;
+  const packSel=document.getElementById('pack-selector');packSel.innerHTML=PACKS.map(p=>`<div class="pack-toggle ${p.active?'active':''}" onclick="togglePack('${p.id}')"><i class="fas ${p.icon} ${p.active?'text-teal':'text-white/40'}"></i><span class="font-bold text-sm ml-2">${p.name}</span></div>`).join('');
+  const rp=document.getElementById('round-picker');rp.innerHTML=[3,5,7].map(r=>`<button class="btn ${r===game.totalRounds?'btn-secondary':'btn-outline'} btn-sm flex-1" onclick="setRounds(${r})">${r}</button>`).join('');
+  renderPlayerList();
+}
+function initLocalLobby(){game.isHost=true;game.isOnline=false;game.players=[];game.scores={};setupLobbyUI(true);showScreen('lobby');}
+function leaveLobby(){if(game.peer){game.peer.destroy();game.peer=null;}game.connections=[];game.hostConn=null;showScreen('title');}
+function selectColor(i){game.selectedColor=i;document.querySelectorAll('.color-opt').forEach((e,idx)=>e.classList.toggle('selected',idx===i));}
+function togglePack(id){const pack=PACKS.find(p=>p.id===id);if(pack)pack.active=!pack.active;setupLobbyUI(!game.isOnline||game.isHost);}
+function setRounds(n){game.totalRounds=n;setupLobbyUI(!game.isOnline||game.isHost);}
+function localAddPlayer(){
+  const input=document.getElementById('player-name-input');const name=input.value.trim();if(!name)return;
+  if(game.players.length>=10){showToast("Max 10 players!");return;}
+  // Check for duplicate names locally
+  if(game.players.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+    showToast("Name already taken!");
+    playSound('wrong');
+    return;
+  }
+  const p={id:'p_'+Date.now()+'_'+Math.random(),name,color:AVATAR_COLORS[game.selectedColor],score:0,isHost:game.players.length===0};game.players.push(p);game.scores[p.id]=0;
+  const usedColors=game.players.map(pl=>pl.color);const next=AVATAR_COLORS.findIndex(c=>!usedColors.includes(c));if(next>=0)selectColor(next);
+  input.value='';input.focus();renderPlayerList();document.getElementById('start-btn').disabled=game.players.length<3;playSound('rank');
+}
+function renderPlayerList(){document.getElementById('player-list').innerHTML=game.players.map(p=>`<div class="flex items-center gap-3 card py-3 px-4 animate-slide-up">${renderAvatar(p)}<span class="font-bold flex-1">${p.name}</span>${!game.isOnline&&!p.isHost?`<button onclick="removeLocalPlayer('${p.id}')" class="text-white/20 hover:text-red"><i class="fas fa-xmark"></i></button>`:''}</div>`).join('');}
+function removeLocalPlayer(id){game.players=game.players.filter(p=>p.id!==id);delete game.scores[id];renderPlayerList();document.getElementById('start-btn').disabled=game.players.length<3;}
+
+function buildPromptPool(){let pool=[];PACKS.forEach(p=>{if(p.active)pool.push(...p.prompts);});const ct=document.getElementById('custom-prompts').value.trim();if(ct)pool.push(...ct.split('\n').filter(l=>l.trim()));if(pool.length===0)pool.push(...PACKS[0].prompts);return shuffleArray(pool);}
+function startGame(){if(game.players.length<3)return;game.prompts=buildPromptPool();game.usedPrompts=new Set();game.players.forEach(p=>{p.score=0;game.scores[p.id]=0;});game.currentRound=0;nextRound();}
+
+function nextRound() {
+  game.currentRound++;if(game.currentRound>game.totalRounds){showYearbook();return;}
+  let prompt=null;for(const p of game.prompts){if(!game.usedPrompts.has(p)){prompt=p;break;}}if(!prompt){game.usedPrompts.clear();prompt=game.prompts[0];}
+  game.usedPrompts.add(prompt);game.currentPrompt=prompt;game.rankings={};game.predictions={};
+  
+  // Plot Twist Chance (8% after round 1)
+  game.activeTwist = null;
+  if(game.currentRound > 1 && Math.random() < 0.08) {
+    game.activeTwist = TWISTS[Math.floor(Math.random()*TWISTS.length)];
+  }
+  
+  showPredictionScreen();
+  if(game.isOnline&&game.isHost)broadcastToClients({type:'change_screen',screen:'prediction',payload:getGameState()});
+}
+function getGameState(){return{round:game.currentRound,totalRounds:game.totalRounds,prompt:game.currentPrompt,players:game.players.map(p=>({id:p.id,name:p.name,color:p.color,score:p.score})),twist:game.activeTwist};}
+
+function showPredictionScreen() {
+  document.getElementById('pred-round-label').textContent=`Round ${game.currentRound} of ${game.totalRounds}`;
+  document.getElementById('pred-prompt').textContent=game.currentPrompt;
+  document.getElementById('pred-status').textContent='Waiting for others...';
+  const twistBanner = document.getElementById('plot-twist-banner');
+  if(game.activeTwist) { twistBanner.classList.remove('hidden'); document.getElementById('plot-twist-text').textContent = game.activeTwist.desc; playSound('twist'); } 
+  else { twistBanner.classList.add('hidden'); }
+  document.getElementById('pred-options').innerHTML=shuffleArray([...game.players]).map(p=>`<button class="card py-3 px-4 flex items-center gap-3 hover:border-white/30 transition cursor-pointer" onclick="submitPrediction('${p.id}')">${renderAvatar(p)}<span class="font-bold">${p.name}</span></button>`).join('');
+  showScreen('prediction');
+}
+function submitPrediction(pid){
+  game.predictions[getMyId()]=pid;playSound('click');
+  document.getElementById('pred-options').innerHTML=`<div class="col-span-2 text-center text-teal font-bold animate-pop"><i class="fas fa-check-circle"></i> Locked in!</div>`;
+  document.getElementById('pred-status').textContent="Waiting for others...";
+  if(game.isOnline&&!game.isHost&&game.hostConn)game.hostConn.send({type:'prediction',guess:pid});
+  else if(game.isOnline&&game.isHost)checkAllPredictions();
+  else if(!game.isOnline)startRankPhase();
+}
+function checkAllPredictions(){if(Object.keys(game.predictions).length>=game.players.length){startRankPhase();if(game.isOnline)broadcastToClients({type:'change_screen',screen:'ranking',payload:getGameState()});}}
+function getMyId(){if(!game.isOnline)return'local_current';if(game.isHost)return game.players.find(p=>p.isHost)?.id||'host';return game.players.find(p=>!p.isHost)?.id||'client';}
+
+function startRankPhase(){game.rankings={};if(!game.isOnline){game.localTurnIndex=0;showLocalPassScreen();}else{showOnlineRankingUI();}}
+function showLocalPassScreen(){const p=game.players[game.localTurnIndex];document.getElementById('pass-avatar').style.background=p.color;document.getElementById('pass-avatar').textContent=p.name.charAt(0).toUpperCase();document.getElementById('pass-name').textContent=p.name;showScreen('pass');}
+function beginLocalRanking(){const p=game.players[game.localTurnIndex];buildRankingCards(p,p.id);showScreen('ranking');}
+function showOnlineRankingUI(){const myId=getMyId();const me=game.players.find(p=>p.id===myId);if(me)buildRankingCards(me,myId);showScreen('ranking');}
+
+function buildRankingCards(contextPlayer, dbId) {
+  game.currentRanking=[];
+  document.getElementById('ranking-player-label').innerHTML=game.isOnline?"Rank the group":`<span style="color:${contextPlayer.color}">${contextPlayer.name}</span> is ranking`;
+  document.getElementById('ranking-prompt').textContent=game.currentPrompt;
+  const hint = document.getElementById('ranking-hint');
+  if(game.activeTwist && game.activeTwist.id === 'inversion') { hint.textContent = "PLOT TWIST: Tap in order — 1st tap = LEAST likely!"; hint.classList.add('text-coral'); } 
+  else { hint.textContent = "Tap players in order — 1st tap = Rank 1 (most likely)"; hint.classList.remove('text-coral'); }
+  document.getElementById('ranking-cards').innerHTML=game.players.map(p=>`<div class="rank-card" data-pid="${p.id}" onclick="toggleRank('${p.id}')"><div class="rank-badge hidden" data-badge="${p.id}"></div>${renderAvatar(p)}<span class="font-bold flex-1">${p.name}</span><span class="text-white/20 text-xs" data-hint="${p.id}">Tap to rank</span></div>`).join('');
+  updateRankUI();
+}
+function toggleRank(pid){const idx=game.currentRanking.indexOf(pid);if(idx>=0)game.currentRanking.splice(idx,1);else game.currentRanking.push(pid);playSound(idx>=0?'click':'rank');updateRankUI();}
+function resetRanking(){game.currentRanking=[];updateRankUI();playSound('click');}
+function updateRankUI(){
+  const total=game.players.length;document.getElementById('submit-rank-btn').disabled=game.currentRanking.length<total;
+  game.players.forEach(p=>{const card=document.querySelector(`.rank-card[data-pid="${p.id}"]`);const badge=document.querySelector(`[data-badge="${p.id}"]`);const hint=document.querySelector(`[data-hint="${p.id}"]`);if(!card)return;const rIdx=game.currentRanking.indexOf(p.id);if(rIdx>=0){card.classList.add('ranked');badge.classList.remove('hidden');badge.textContent=rIdx+1;hint.textContent=`Rank ${rIdx+1}`;}else{card.classList.remove('ranked');badge.classList.add('hidden');hint.textContent='Tap to rank';}});
+}
+function submitRanking(){
+  if(game.currentRanking.length<game.players.length)return;
+  const dbId=game.isOnline?getMyId():game.players[game.localTurnIndex].id;game.rankings[dbId]=[...game.currentRanking];playSound('rank');
+  if(game.isOnline){if(!game.isHost&&game.hostConn)game.hostConn.send({type:'ranking',ranking:game.currentRanking});else if(game.isHost)checkAllRankings();showToast("Rankings submitted! Waiting...");document.getElementById('submit-rank-btn').disabled=true;}
+  else{game.localTurnIndex++;if(game.localTurnIndex<game.players.length)showLocalPassScreen();else calculateAndReveal();}
+}
+function checkAllRankings(){if(Object.keys(game.rankings).length>=game.players.length)calculateAndReveal();}
+
+function calculateConsensus() {
+  const totals={};game.players.forEach(p=>totals[p.id]=0);
+  Object.values(game.rankings).forEach(ranking=>{ranking.forEach((pid,pos)=>{totals[pid]+=(pos+1);});});
+  let sorted=Object.entries(totals).sort((a,b)=>a[1]-b[1]);
+  if(game.activeTwist && game.activeTwist.id === 'inversion') sorted = sorted.reverse();
+  game.consensus=[];let currentRank=1;
+  for(let i=0;i<sorted.length;i++){if(i>0&&sorted[i][1]!==sorted[i-1][1])currentRank=i+1;game.consensus.push({playerId:sorted[i][0],totalScore:sorted[i][1],rank:currentRank});}
+}
+
+function calculateScores() {
+  game.roundScores={};const consensusWinnerId=game.consensus[0]?.playerId;const currentLeader=[...game.players].sort((a,b)=>b.score-a.score)[0];
+  game.players.forEach(p=>{
+    const myRanking=game.rankings[p.id];if(!myRanking){game.roundScores[p.id]=0;return;}let score=0;
+    myRanking.forEach((rankedPid,myPos)=>{const cItem=game.consensus.find(c=>c.playerId===rankedPid);if(!cItem)return;const diff=Math.abs((myPos+1)-cItem.rank);if(diff===0)score+=100;else if(diff===1)score+=50;else if(diff===2)score+=25;});
+    if(game.predictions[p.id]===consensusWinnerId)score+=75;
+    if(game.activeTwist && game.activeTwist.id === 'hater') { if(myRanking[myRanking.length - 1] === currentLeader.id) score += 100; }
+    if(game.activeTwist && game.activeTwist.id === 'podium') { const myConsensusRank = game.consensus.find(c => c.playerId === p.id)?.rank || 999; if(myConsensusRank > 3) score = 0; else score *= 2; }
+    game.roundScores[p.id]=score;game.scores[p.id]=(game.scores[p.id]||0)+score;p.score=game.scores[p.id];
+  });
+}
+
+function calculateAndReveal(){calculateConsensus();calculateScores();revealResults();if(game.isOnline)broadcastToClients({type:'change_screen',screen:'reveal',payload:getGameState()});}
+
+function revealResults() {
+  document.getElementById('reveal-round-label').textContent=`Round ${game.currentRound} Results`;
+  document.getElementById('reveal-prompt').textContent=game.currentPrompt + (game.activeTwist?` (${game.activeTwist.name})`:'');
+  const list=document.getElementById('reveal-list');const actions=document.getElementById('reveal-actions');actions.classList.add('hidden');list.innerHTML='';
+  const revealOrder=[...game.consensus].reverse();
+  revealOrder.forEach(item=>{
+    const p=game.players.find(pl=>pl.id===item.playerId);if(!p)return;const isWinner=item.rank===1;
+    const rankColors={1:'#FFE66D',2:'#C0C0C0',3:'#CD7F32'};const rc=rankColors[item.rank]||'rgba(255,255,255,0.2)';
+    const el=document.createElement('div');el.className=`reveal-item ${isWinner?'winner':''}`;
+    el.innerHTML=`<div class="reveal-rank" style="background:${rc};color:${item.rank<=3?'#1A1932':'#fff'}">${isWinner?'<i class="fas fa-crown"></i>':'#'+item.rank}</div>${renderAvatar(p)}<div class="flex-1 text-left font-bold text-lg">${p.name}</div>`;
+    list.appendChild(el);
+  });
+  showScreen('reveal');
+  const items=list.querySelectorAll('.reveal-item');
+  items.forEach((item,idx)=>{
+    setTimeout(()=>{item.classList.add('shown');playSound('reveal');if(idx===items.length-1){setTimeout(()=>{playSound('fanfare');launchConfetti(80);actions.classList.remove('hidden');},600);}},800+idx*700);
+  });
+}
+
+function showRoundScores() {
+  const list=document.getElementById('score-list');const sorted=[...game.players].sort((a,b)=>(game.roundScores[b.id]||0)-(game.roundScores[a.id]||0));
+  list.innerHTML=sorted.map((p,i)=>{const rs=game.roundScores[p.id]||0;const maxP=game.players.length*100+75;const pct=Math.min(100,Math.round((rs/maxP)*100));
+  return`<div class="card flex items-center gap-3 py-3 px-4 animate-slide-up" style="animation-delay:${i*0.08}s">${renderAvatar(p)}<div class="flex-1"><div class="font-bold">${p.name}</div><div class="w-full bg-white/10 rounded-full h-2 mt-1"><div class="h-2 rounded-full" style="width:${pct}%;background:${p.color}"></div></div></div><div class="font-display text-xl text-gold">+${rs}</div></div>`;}).join('');
+  document.getElementById('next-round-btn').innerHTML=game.currentRound>=game.totalRounds?'<i class="fas fa-trophy"></i> Yearbook':'<i class="fas fa-arrow-right"></i> Next Round';
+  showScreen('scores');if(game.isOnline)broadcastToClients({type:'change_screen',screen:'scores'});
+}
+
+function showYearbook() {
+  const sorted=[...game.players].sort((a,b)=>b.score-a.score);const winner=sorted[0];
+  document.getElementById('final-winner').innerHTML=`<div class="flex flex-col items-center animate-pop"><div class="relative">${renderAvatar(winner,'avatar-xl')}<div class="absolute -top-6 left-1/2 -translate-x-1/2 text-3xl animate-bounce"><i class="fas fa-crown text-gold"></i></div></div><div class="font-display text-3xl mt-4 gradient-text">${winner.name}</div><div class="text-white/50">Winner with ${winner.score} points!</div></div>`;
+  const superlatives=[{title:"The Mind Reader",icon:"fa-brain",color:"text-teal"},{title:"The Wild Card",icon:"fa-dice",color:"text-pink"},{title:"The Narcissist",icon:"fa-mirror",color:"text-gold"},{title:"The Hivemind",icon:"fa-people-arrows",color:"text-lime"}];
+  const awards=[sorted[0],sorted[sorted.length-1],game.players[Math.floor(Math.random()*game.players.length)],game.players[Math.floor(Math.random()*game.players.length)]];
+  document.getElementById('final-superlatives').innerHTML=superlatives.map((s,i)=>`<div class="card py-4 px-3 text-center"><i class="fas ${s.icon} text-2xl ${s.color} mb-2"></i><div class="font-bold text-xs uppercase tracking-wider text-white/60">${s.title}</div><div class="font-display text-lg">${awards[i].name}</div></div>`).join('');
+  document.getElementById('final-standings').innerHTML=sorted.map((p,i)=>`<div class="card flex items-center gap-3 py-3 px-4"><div class="w-8 text-center font-display ${i<3?'text-gold':'text-white/30'}">${i+1}</div>${renderAvatar(p)}<span class="font-bold flex-1">${p.name}</span><span class="font-display text-gold">${p.score}</span></div>`).join('');
+  showScreen('final');if(game.isOnline)broadcastToClients({type:'change_screen',screen:'final'});launchConfetti(100);playSound('fanfare');
+}
+function backToLobby(){if(game.isOnline&&game.isHost){broadcastToClients({type:'change_screen',screen:'lobby'});game.connections.forEach(c=>c.close());game.connections=[];}if(game.peer){game.peer.destroy();game.peer=null;}showScreen('title');}
+
+function shuffleArray(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function populateScreenPayload(screen,payload){if(!payload)return;game.currentPrompt=payload.prompt;game.currentRound=payload.round;game.totalRounds=payload.totalRounds;game.activeTwist=payload.twist;payload.players.forEach(sp=>{const mp=game.players.find(p=>p.name===sp.name);if(mp){mp.score=sp.score;mp.id=sp.id;mp.color=sp.color;}});if(screen==='prediction')showPredictionScreen();else if(screen==='ranking')showOnlineRankingUI();else if(screen==='reveal')revealResults();else if(screen==='scores')showRoundScores();else if(screen==='final')showYearbook();}
+</script>
+</body>
+</html>
